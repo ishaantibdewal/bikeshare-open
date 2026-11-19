@@ -75,6 +75,11 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     out["cnt_lag_7"] = out[TARGET].shift(LAG_WARMUP)
     out["cnt_roll_7"] = out[TARGET].shift(1).rolling(LAG_WARMUP).mean()
 
+    # Yesterday's weather. A BAD day depresses cnt_lag_1, so persistence
+    # under-predicts the day after; this lets the model see why. Shifted on
+    # the reindexed calendar, so the day after a gap is NaN, not d-2.
+    out["weather_severity_lag_1"] = out["weather_severity"].shift(1)
+
     return out.dropna().reset_index(drop=True)
 
 
