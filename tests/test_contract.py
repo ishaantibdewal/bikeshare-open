@@ -1,9 +1,11 @@
 """Guard rails on the ingest contract and the trained model's behaviour."""
+import hashlib
+
 import pandas as pd
 import pytest
 from sklearn.metrics import r2_score
 
-from src.config import LAG_WARMUP, TARGET
+from src.config import LAG_WARMUP, RAW, RAW_SHA256, TARGET
 from src.features import build_features, feature_columns, reindex_to_calendar
 from src.ingest import load_raw
 from src.train import MODELS, temporal_split
@@ -17,6 +19,17 @@ def raw():
 @pytest.fixture(scope="module")
 def feats(raw):
     return build_features(raw)
+
+
+def test_raw_csv_is_unmodified():
+    """data/raw/ is immutable. Deny rules stop the Edit/Write tools, not a Bash
+    `cp` or `sed -i`, and a one-cell change leaves every other test green while
+    the metrics move. Compare bytes against the shipped hash."""
+    digest = hashlib.sha256(RAW.read_bytes()).hexdigest()
+    assert digest == RAW_SHA256, (
+        f"{RAW.name} changed (sha256 {digest[:16]}, expected {RAW_SHA256[:16]}). "
+        "Restore it with: git checkout -- data/raw/bike_daily.csv"
+    )
 
 
 def test_calendar_is_complete_before_lagging(raw):
