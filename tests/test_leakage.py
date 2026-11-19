@@ -57,6 +57,19 @@ def test_rolling_mean_excludes_today(feats):
         assert feats.set_index("dteday").cnt_roll_7[date] == pytest.approx(expected)
 
 
+def test_weather_lag_is_previous_calendar_day(feats):
+    """weather_severity_lag_1 on 2011-04-17 must be the severity recorded on
+    2011-04-16, a BAD day (2). The 17th itself was GOOD (0), so a missing
+    .shift(1) returns 0 here and fails. Expected value is read from the raw
+    CSV for the strictly earlier date, not from the feature table."""
+    raw = load_raw().set_index("dteday")
+    prev, date = pd.Timestamp("2011-04-16"), pd.Timestamp("2011-04-17")
+    assert raw.loc[prev, "weather"] == "BAD" and raw.loc[date, "weather"] == "GOOD"
+    expected = 2.0  # WEATHER_ORDER["BAD"], hand-computed from the 2011-04-16 row
+    got = feats.set_index("dteday").weather_severity_lag_1[date]
+    assert got == expected, f"weather_severity_lag_1 on {date.date()} = {got}, expected {expected}"
+
+
 def test_no_missing_values(feats):
     assert feats[feature_columns(feats)].isna().sum().sum() == 0
 
