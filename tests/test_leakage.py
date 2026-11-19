@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from src.config import FORBIDDEN, TARGET
-from src.features import build_features, feature_columns
+from src.features import build_features, encode_weather, feature_columns
 from src.ingest import load_raw
 
 
@@ -68,6 +68,16 @@ def test_weather_lag_is_previous_calendar_day(feats):
     expected = 2.0  # WEATHER_ORDER["BAD"], hand-computed from the 2011-04-16 row
     got = feats.set_index("dteday").weather_severity_lag_1[date]
     assert got == expected, f"weather_severity_lag_1 on {date.date()} = {got}, expected {expected}"
+
+
+def test_weather_encoder_rejects_unknown_labels():
+    """Every label in the shipped CSV is known, so no test on the real data can
+    see a weakened encoder: removing its `raise` leaves the suite green while an
+    unseen label (e.g. a UCI code, or a new category) silently becomes NaN and is
+    later deleted by dropna(). Feed it one directly."""
+    assert encode_weather(pd.Series(["GOOD", "MISTY", "BAD"])).tolist() == [0.0, 1.0, 2.0]
+    with pytest.raises(ValueError, match="unmapped weather labels"):
+        encode_weather(pd.Series(["GOOD", "STORM"]))
 
 
 def test_no_missing_values(feats):
