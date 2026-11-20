@@ -64,7 +64,24 @@ is harder (it includes Hurricane Sandy). Persistence still has the lowest test M
 
 ## Exercise 5: ridge vs persistence
 
-_To do._
+Ridge is not worth deploying over persistence as trained, though it shows where a deployable model
+would add value. Its test R^2 lead (0.6124 against 0.5099) is real but concentrated in a few days.
+On the 17 test days when demand moved more than 2,000 rides from the day before, ridge's MAE is
+1,844 against persistence's 3,019. It also misses by more than 2,000 rides on only 7 days against
+17. Those are the days a forecast is for, and the squared-error metric rewards it for them. On the
+other 167 days persistence is better (MAE 618 against 816; median miss 506 against 878), and it is
+closer than ridge on 109 of 184 days, which is why it wins overall MAE (840 against 911).
+
+The cause is fixable but has not been fixed. Ridge learned 2011's demand level and under-predicts
+every 2012 day by 523 rides on average (persistence: +16). The same pattern holds on validation
+(bias -479; ridge closer on only 92 of 182 days). With that bias removed in hindsight, ridge's test
+MAE would be 703, better than persistence. But that correction used the test set, so it is evidence
+of what a fix could do, not a result.
+
+**Recommendation:** keep persistence as the deployed forecast. Promote ridge only after it is refit
+on recent data, for example 2011 plus H1 2012, and shown on a holdout it has not seen to beat
+persistence on MAE, not just R^2. Numbers from `python -m src.train --ex5`; this analysis was run
+after the test set had been scored, and nothing was tuned on it.
 
 ## Attribution
 

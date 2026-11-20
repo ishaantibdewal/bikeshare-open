@@ -157,7 +157,46 @@ def target_experiment(score_test: bool = False) -> dict:
     return out
 
 
+# --- Exercise 5: where ridge beats persistence, and where it loses ---------
+# Post-hoc analysis of already-scored models; nothing is tuned on it.
+# Run: python -m src.train --ex5
+
+def error_breakdown() -> dict:
+    df = pd.read_parquet(PROCESSED)
+    cols = feature_columns(df)
+    train, valid, test = temporal_split(df)
+    ridge = clone(MODELS["ridge"]).fit(train[cols], train[TARGET])
+    out = {}
+    for name, part in [("valid", valid), ("test", test)]:
+        y = part[TARGET].to_numpy(dtype=float)
+        e_r = ridge.predict(part[cols]) - y
+        e_p = part.cnt_lag_1.to_numpy(dtype=float) - y
+        a_r, a_p = np.abs(e_r), np.abs(e_p)
+        swing = a_p > 2000  # demand moved >2,000 rides from yesterday
+        row = {}
+        for label, f in [
+            ("mae", np.mean),
+            ("median_abs_err", np.median),
+            ("p90_abs_err", lambda a: np.percentile(a, 90)),
+            ("mean_err_bias", None),
+            ("days_abs_err_gt_2000", lambda a: (a > 2000).sum()),
+            ("mae_on_swing_days", lambda a: a[swing].mean()),
+            ("mae_on_other_days", lambda a: a[~swing].mean()),
+        ]:
+            r, p = (e_r.mean(), e_p.mean()) if f is None else (f(a_r), f(a_p))
+            row[label] = {"ridge": round(float(r), 1), "persistence": round(float(p), 1)}
+        row["n_days"] = len(y)
+        row["n_swing_days"] = int(swing.sum())
+        row["days_ridge_closer"] = int((a_r < a_p).sum())
+        row["ridge_mae_if_bias_removed_hindsight"] = round(float(np.abs(e_r - e_r.mean()).mean()), 1)
+        out[name] = row
+    return out
+
+
 if __name__ == "__main__":
+    if "--ex5" in sys.argv:
+        print(json.dumps(error_breakdown(), indent=2))
+        sys.exit(0)
     if "--ex4" in sys.argv:
         score_test = "--score-test" in sys.argv
         res = target_experiment(score_test=score_test)
