@@ -1,0 +1,47 @@
+{
+  "scored": [
+    "valid"
+  ],
+  "baseline_persistence": {
+    "valid": {
+      "r2": 0.4507,
+      "mae": 900.6
+    }
+  },
+  "ridge": {
+    "valid": {
+      "r2": 0.667,
+      "mae": 803.9
+    }
+  },
+  "hgb": {
+    "valid": {
+      "r2": 0.2437,
+      "mae": 1275.2
+    }
+  },
+  "hgb_A_log": {
+    "valid": {
+      "r2": 0.1721,
+      "mae": 1337.8
+    }
+  },
+  "hgb_B_diff_lag_1": {
+    "valid": {
+      "r2": 0.6254,
+      "mae": 804.3
+    }
+  },
+  "hgb_C_log_ratio_roll_7": {
+    "valid": {
+      "r2": 0.7161,
+      "mae": 724.5
+    }
+  },
+  "hgb_D_detrend_linear": {
+    "valid": {
+      "r2": 0.7601,
+      "mae": 654.3
+    }
+  }
+}

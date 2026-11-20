@@ -16,9 +16,11 @@ reason it fails is the headline result.
 Run: python -m src.train
 """
 import json
+import sys
 
+import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.base import BaseEstimator, RegressorMixin, clone
 from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.linear_model import Ridge
@@ -26,7 +28,15 @@ from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from src.config import METRICS, PROCESSED, TARGET, TRAIN_END, VALID_END
+from src.config import (
+    METRICS,
+    METRICS_EX4_TEST,
+    METRICS_EX4_VALID,
+    PROCESSED,
+    TARGET,
+    TRAIN_END,
+    VALID_END,
+)
 from src.features import feature_columns
 
 
@@ -86,7 +96,76 @@ def fit_and_score() -> dict:
     return results
 
 
+# --- Exercise 4: target transformations for the booster -------------------
+# Not part of `make all`: reports/metrics.json stays the untransformed
+# pipeline. Run with `python -m src.train --ex4` (validation only) and, once,
+# `python -m src.train --ex4 --score-test` after the choice is fixed.
+# Each entry maps the target to what hgb learns (forward) and back (inverse),
+# using only columns known at prediction time, or a trend fit on train.
+
+def _trend(train: pd.DataFrame):
+    """Linear trend of cnt on calendar day, fit on training rows only."""
+    t0 = train.dteday.min()
+    days = lambda part: (part.dteday - t0).dt.days.to_numpy(dtype=float)
+    slope, intercept = np.polyfit(days(train), train[TARGET].to_numpy(dtype=float), 1)
+    return lambda part: intercept + slope * days(part)
+
+
+def target_transforms(train: pd.DataFrame) -> dict:
+    trend = _trend(train)
+    return {
+        "A_log": (lambda y, p: np.log(y), lambda z, p: np.exp(z)),
+        "B_diff_lag_1": (lambda y, p: y - p.cnt_lag_1, lambda z, p: p.cnt_lag_1 + z),
+        "C_log_ratio_roll_7": (
+            lambda y, p: np.log(y / p.cnt_roll_7),
+            lambda z, p: p.cnt_roll_7 * np.exp(z),
+        ),
+        "D_detrend_linear": (lambda y, p: y - trend(p), lambda z, p: trend(p) + z),
+    }
+
+
+# Chosen on validation by the rule pre-registered in docs/DECISIONS.md (best
+# validation R^2 among the defensible B and C). Only this one is test-scored.
+EX4_CHOSEN = "C_log_ratio_roll_7"
+
+
+def target_experiment(score_test: bool = False) -> dict:
+    df = pd.read_parquet(PROCESSED)
+    cols = feature_columns(df)
+    train, valid, test = temporal_split(df)
+    splits = [("valid", valid)] + ([("test", test)] if score_test else [])
+    transforms = target_transforms(train)
+    if score_test:
+        transforms = {EX4_CHOSEN: transforms[EX4_CHOSEN]}
+
+    def score(pred_fn):
+        return {
+            name: {
+                "r2": round(float(r2_score(part[TARGET], pred_fn(part))), 4),
+                "mae": round(float(mean_absolute_error(part[TARGET], pred_fn(part))), 1),
+            }
+            for name, part in splits
+        }
+
+    out = {"scored": [s for s, _ in splits]}
+    for name in ["baseline_persistence", "ridge", "hgb"]:
+        model = clone(MODELS[name]).fit(train[cols], train[TARGET])
+        out[name] = score(lambda p, m=model: m.predict(p[cols]))
+    for name, (fwd, inv) in transforms.items():
+        hgb = clone(MODELS["hgb"]).fit(train[cols], fwd(train[TARGET], train))
+        out[f"hgb_{name}"] = score(lambda p, m=hgb, inv=inv: np.asarray(inv(m.predict(p[cols]), p)))
+    return out
+
+
 if __name__ == "__main__":
+    if "--ex4" in sys.argv:
+        score_test = "--score-test" in sys.argv
+        res = target_experiment(score_test=score_test)
+        path = METRICS_EX4_TEST if score_test else METRICS_EX4_VALID
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(res, indent=2))
+        print(json.dumps(res, indent=2))
+        sys.exit(0)
     res = fit_and_score()
     METRICS.parent.mkdir(parents=True, exist_ok=True)
     METRICS.write_text(json.dumps(res, indent=2))
