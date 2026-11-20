@@ -56,4 +56,25 @@ change no number, but I would raise them with the teammate:
 
 ## Own repo audited with `agent/audit.py`
 
-_To do: run on the finished repo; output goes to `reports/audit.jsonl`._
+**Not completed: stopped because it took too long.** I ran
+`python agent/audit.py . --out reports/audit.jsonl` on the finished repo (commit `ea136db`) with the
+default local model (`bikeshare-coder`: `qwen3.5:9b` via Ollama, 64k context). I stopped it
+at 20:47 on 2026-11-19, after 41 minutes and 44 tool calls (21 Bash, 17 Read, 3 Glob, 1 sub-agent,
+1 Write). It had not returned its final answer.
+
+`agent/audit.py` writes its output only when the run ends, so the stopped run wrote nothing.
+`reports/audit.jsonl` holds one row **written by hand**. It records the run's model, times and
+`"error": "stopped_by_user"`, in the same style as the script's own `run_failed` error rows. It
+contains no verdict, because the auditor never gave one.
+
+What the run's transcript shows it had covered before it was stopped. These are interim notes from
+the model, not findings:
+- it ran the tests ("All tests pass");
+- it checked the rolling-mean alignment. It first reported "an issue", then retracted it as its own
+  indexing mistake ("the lag computations are actually working correctly");
+- it confirmed both baselines appear in `metrics.json`;
+- it checked that the scaler is fit inside the ridge pipeline on training rows;
+- it had begun the reproducibility check (`python -m src.train` twice).
+
+Its one Write, a scratch `test_lags.py` in the repo root, was refused by the permission settings.
+`git status` was clean afterwards. No finding changes a number, because none was reported.

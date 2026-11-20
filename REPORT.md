@@ -143,4 +143,6 @@ with each other.
   Each is logged in `DECISIONS.md`. I am accountable for all of them as claims, but I did not reach
   them independently.
 
+The `agent/audit.py` self-audit on the local model was stopped after 41 minutes without a result, so
+`reports/audit.jsonl` is a hand-written row recording that (details in `docs/AUDIT.md`).
 Exercise 6 (optional) was not done.
