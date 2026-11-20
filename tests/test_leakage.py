@@ -59,6 +59,22 @@ def test_lags_are_true_calendar_lags(feats):
     assert checked > 600, "too few rows actually verified"
 
 
+def test_no_row_draws_on_a_missing_day(feats):
+    """Every kept row's 7-day history must exist in the raw data, or one of
+    its lag/rolling features silently spans the gap. test_lags_are_true_calendar_lags
+    skips dates whose previous day is missing, and test_calendar_is_complete_before_lagging
+    calls reindex_to_calendar itself, so neither notices if build_features stops
+    calling it: 2011-03-11 then gets the 03-09 count as its "1-day" lag."""
+    raw_dates = set(load_raw().dteday)
+    bad = [
+        d.date()
+        for d in feats.dteday
+        if any(d - pd.Timedelta(days=k) not in raw_dates for k in range(1, 8))
+        and d - pd.Timedelta(days=7) >= min(raw_dates)
+    ]
+    assert not bad, f"rows whose lag window spans a missing day: {bad}"
+
+
 def test_lag_is_not_the_target(feats):
     assert not (feats.cnt_lag_1 == feats[TARGET]).all()
 
