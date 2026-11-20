@@ -45,6 +45,7 @@ FAILED tests/test_leakage.py::test_weather_lag_is_previous_calendar_day - Att...
 | 2 | `.shift(1)` deleted from `cnt_roll_7` | `test_rolling_mean_excludes_today` | exit 2 | 2 |
 | 3 | `raise` removed from `encode_weather` | **nothing** (suite green), until `test_weather_encoder_rejects_unknown_labels` was added | exit 0, then exit 2 | 2 |
 | 4 | `cp` of a tampered CSV into `data/raw/` | **nothing**, until `test_raw_csv_is_unmodified` was added | never runs | n/a (restored with `git checkout`) |
+| 5 | `reindex_to_calendar` call removed (run with `/seed-fault`) | **nothing**, until `test_no_row_draws_on_a_missing_day` was added | exit 0, then exit 2 | 2 |
 
 ### Fault 1: forbidden column added to `feature_columns`
 
@@ -271,3 +272,66 @@ What would catch it:
    anywhere (`cp`, `mv`, `sed -i`, `python -c`, `>`).
 4. **Filesystem permission:** `chmod -R a-w data/raw`. Cheap and covers every
    tool, but the agent's own Bash can undo it.
+
+### Fault 5: `reindex_to_calendar` removed (first run of the `/seed-fault` skill)
+
+Run by following `.claude/skills/seed-fault/SKILL.md` step by step, with the argument "remove the
+`reindex_to_calendar` call from `build_features`". This is the Step 5 calendar-gap bug from the
+lesson. Commits `c553f22` (seed), `118581f` (new test, red) and `9966901` (fix).
+
+**Prediction (made before running):** no test fails.
+- `test_lags_are_true_calendar_lags` skips any date whose previous day is missing.
+- The row-loss bound allows 14 lost rows, and this fault loses only 7.
+- `test_calendar_is_complete_before_lagging` calls `reindex_to_calendar` itself, so it does not
+  check that `build_features` uses it.
+
+**The prediction held.**
+
+```diff
+-    out = reindex_to_calendar(df.sort_values("dteday").reset_index(drop=True)).copy()
++    out = df.sort_values("dteday").reset_index(drop=True).copy()
+```
+
+```
+$ make test
+...................                                                      [100%]
+19 passed in 1.77s
+
+$ bash .claude/skills/seed-fault/run_hook.sh src/features.py
+hook exit code: 0
+hook stderr:
+
+rows 721
+2011-03-11 cnt_lag_1 = 1891.0 | cnt on 03-09 = 1891 (labelled a 1-day lag, is a 2-day lag)
+```
+
+Seven rows (2011-03-11 to 03-17) now carry lag and rolling features that span the missing day,
+and nothing fails.
+
+What catches it: `tests/test_leakage.py::test_no_row_draws_on_a_missing_day` requires every
+kept row's 7-day history to exist in the raw data. With the fault still in place:
+
+```
+$ make test
+E       AssertionError: rows whose lag window spans a missing day: [datetime.date(2011, 3, 11), datetime.date(2011, 3, 12), datetime.date(2011, 3, 13), datetime.date(2011, 3, 14), datetime.date(2011, 3, 15), datetime.date(2011, 3, 16), datetime.date(2011, 3, 17)]
+E       assert not [datetime.date(2011, 3, 11), datetime.date(2011, 3, 12), datetime.date(2011, 3, 13), datetime.date(2011, 3, 14), datetime.date(2011, 3, 15), datetime.date(2011, 3, 16), ...]
+FAILED tests/test_leakage.py::test_no_row_draws_on_a_missing_day - AssertionE...
+1 failed, 19 passed in 1.91s
+make: *** [test] Error 1
+```
+
+Hook stderr (exit code 2), last lines:
+
+```
+>       assert not bad, f"rows whose lag window spans a missing day: {bad}"
+E       AssertionError: rows whose lag window spans a missing day: [datetime.date(2011, 3, 11), datetime.date(2011, 3, 12), datetime.date(2011, 3, 13), datetime.date(2011, 3, 14), datetime.date(2011, 3, 15), datetime.date(2011, 3, 16), datetime.date(2011, 3, 17)]
+E       assert not [datetime.date(2011, 3, 11), datetime.date(2011, 3, 12), datetime.date(2011, 3, 13), datetime.date(2011, 3, 14), datetime.date(2011, 3, 15), datetime.date(2011, 3, 16), ...]
+
+tests/test_leakage.py:75: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_leakage.py::test_no_row_draws_on_a_missing_day - AssertionE...
+1 failed, 10 passed in 0.34s
+```
+
+Fix: **2 turns** (one Edit restoring the call, one `make test` run: 20 passed; hook exit 0;
+`git diff` on `src/` against the pre-seed commit is empty).
