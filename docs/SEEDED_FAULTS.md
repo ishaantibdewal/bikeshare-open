@@ -46,6 +46,7 @@ FAILED tests/test_leakage.py::test_weather_lag_is_previous_calendar_day - Att...
 | 3 | `raise` removed from `encode_weather` | **nothing** (suite green), until `test_weather_encoder_rejects_unknown_labels` was added | exit 0, then exit 2 | 2 |
 | 4 | `cp` of a tampered CSV into `data/raw/` | **nothing**, until `test_raw_csv_is_unmodified` was added | never runs | n/a (restored with `git checkout`) |
 | 5 | `reindex_to_calendar` call removed (run with `/seed-fault`) | **nothing**, until `test_no_row_draws_on_a_missing_day` was added | exit 0, then exit 2 | 2 |
+| 6 | `cnt_lag_7` shifted by 6, not 7 (run with `/seed-fault`) | **nothing**, until `test_lag_7_is_a_true_7_day_lag` was added | exit 0, then exit 2 | 2 |
 
 ### Fault 1: forbidden column added to `feature_columns`
 
@@ -334,4 +335,57 @@ FAILED tests/test_leakage.py::test_no_row_draws_on_a_missing_day - AssertionE...
 ```
 
 Fix: **2 turns** (one Edit restoring the call, one `make test` run: 20 passed; hook exit 0;
+`git diff` on `src/` against the pre-seed commit is empty).
+
+### Fault 6: `cnt_lag_7` shifted by 6 days (second run of `/seed-fault`)
+
+Argument: "make `cnt_lag_7` a 6-day lag". Commits `053cba7` (seed), `a02d1ea` (new test, red) and
+`aa1f910` (fix).
+
+**Prediction (made before running):** no test fails, because no test checks `cnt_lag_7`'s value.
+The lag tests check only `cnt_lag_1`, and the row-loss bound is unaffected. **The prediction held.**
+
+```diff
+-    out["cnt_lag_7"] = out[TARGET].shift(LAG_WARMUP)
++    out["cnt_lag_7"] = out[TARGET].shift(LAG_WARMUP - 1)
+```
+
+```
+$ make test
+20 passed in 1.14s
+
+$ bash .claude/skills/seed-fault/run_hook.sh src/features.py
+hook exit code: 0
+hook stderr:
+```
+
+What catches it: `tests/test_leakage.py::test_lag_7_is_a_true_7_day_lag` checks that every row's
+`cnt_lag_7` equals the raw count on d-7. With the fault still in place:
+
+```
+$ make test
+E               AssertionError: bad 7-day lag at 2011-01-10
+E               assert 1562.0 == np.int64(1349)
+FAILED tests/test_leakage.py::test_lag_7_is_a_true_7_day_lag - AssertionError...
+1 failed, 20 passed in 1.18s
+make: *** [test] Error 1
+```
+
+Hook output (exit code 2), last lines:
+
+```
+hook exit code: 2
+hook stderr:
+...
+>               assert lag == raw[week_ago], f"bad 7-day lag at {date.date()}"
+E               AssertionError: bad 7-day lag at 2011-01-10
+E               assert 1562.0 == np.int64(1349)
+
+tests/test_leakage.py:87: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_leakage.py::test_lag_7_is_a_true_7_day_lag - AssertionError...
+1 failed, 11 passed in 0.24s
+```
+
+Fix: **2 turns** (one edit restoring the 7-day shift, one `make test` run: 21 passed; hook exit 0;
 `git diff` on `src/` against the pre-seed commit is empty).
