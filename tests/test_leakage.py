@@ -75,6 +75,20 @@ def test_no_row_draws_on_a_missing_day(feats):
     assert not bad, f"rows whose lag window spans a missing day: {bad}"
 
 
+def test_lag_7_is_a_true_7_day_lag(feats):
+    """cnt_lag_7 for date d must equal cnt on d-7, on every row. Nothing else
+    checks its value: shifting it by 6 instead of 7 left the suite green."""
+    by_date = feats.set_index("dteday")[TARGET]
+    raw = load_raw().set_index("dteday")[TARGET]
+    checked = 0
+    for date, lag in feats.set_index("dteday").cnt_lag_7.items():
+        week_ago = date - pd.Timedelta(days=7)
+        if week_ago in raw.index:
+            assert lag == raw[week_ago], f"bad 7-day lag at {date.date()}"
+            checked += 1
+    assert checked == len(by_date), "every kept row should have its d-7 count in the raw data"
+
+
 def test_lag_is_not_the_target(feats):
     assert not (feats.cnt_lag_1 == feats[TARGET]).all()
 
