@@ -8,7 +8,14 @@ rides) from calendar, weather, and lagged-demand features.
 - `make features` - build `data/processed/features.parquet`
 - `make train` - fit models, write `reports/metrics.json`
 - `make test` - pytest; run this before claiming anything works
-- `make all` - the three pipeline stages in order
+- `make all` - the three pipeline stages in order; reproduces the committed
+  `reports/metrics.json` (the headline numbers) exactly
+- `python -m src.train --ex4` / `--ex5` - Exercise 4/5 analyses, not part of
+  `make all`. Never run `--ex4 --score-test` again: the test set was used once.
+
+## Skills
+- `/new-feature <description>` - add a feature, failing test first
+- `/seed-fault <description>` - seed a fault, record test and hook output, fix it
 
 ## Non-negotiable rules
 - **Never** put `casual` or `registered` in a feature set:
@@ -19,7 +26,17 @@ rides) from calendar, weather, and lagged-demand features.
   Train = 2011, valid = H1 2012, test = H2 2012. Never tune on test.
 - Any new lag or rolling feature must be built on a gap-free calendar
   index (`src.features.reindex_to_calendar`) and must `.shift(1)` before
-  it aggregates. Add a test for it in `tests/test_leakage.py`.
+  it aggregates. Add a test for it in `tests/test_leakage.py` (the hook only
+  runs that file) that checks its value on every row against the raw CSV.
+  This includes lags of weather (`weather_severity_lag_1`), not just of `cnt`.
+- **Never** write to `data/raw/`, including from Bash (`cp`, `mv`, `sed -i`).
+  Deny rules do not cover Bash; `test_raw_csv_is_unmodified` checks the
+  sha256. If it fails, `git checkout -- data/raw/bike_daily.csv`.
+- A new raw column must be classified in `src/config.py` (`FORBIDDEN`,
+  `RAW_FEATURE_COLS`, `ENCODED_COLS` or `REDUNDANT_COLS`) by a person before
+  it is used. Ask; do not classify it yourself.
+- Test-set scores are final. While iterating, read validation numbers only.
+  Log every methodological decision as one dated line in `docs/DECISIONS.md`.
 - Report the mean baseline **and** the persistence baseline (yesterday's
   count) alongside every model. A negative R^2 is a finding, not a bug
   to hide.

@@ -26,7 +26,11 @@ BASE ?= qwen3.5:9b
 
 model:
 	ollama pull $(BASE)
-	sed "s|^FROM .*|FROM $(BASE)|" model/Modelfile | ollama create bikeshare-coder -f -
+	# Ollama >= 0.22 no longer reads a Modelfile from stdin (`-f -` fails with
+	# "no Modelfile or safetensors files found"), so write it to a file first.
+	sed "s|^FROM .*|FROM $(BASE)|" model/Modelfile > model/.Modelfile.build
+	ollama create bikeshare-coder -f model/.Modelfile.build
+	rm -f model/.Modelfile.build
 
 check-model:
 	bash model/check.sh
