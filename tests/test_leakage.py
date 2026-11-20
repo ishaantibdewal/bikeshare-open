@@ -31,6 +31,22 @@ def test_no_forbidden_features(feats):
     assert not (cols & FORBIDDEN), f"forbidden columns in feature set: {cols & FORBIDDEN}"
 
 
+def test_no_feature_restates_a_forbidden_column(feats):
+    """test_no_forbidden_features checks names. This checks values, so a
+    leaky column copied in under an innocent name (out["rides_adj"] =
+    out.casual), rescaled, or split into two features that sum to cnt is
+    still caught. Honest features peak at |corr| 0.90 (cnt_roll_7 vs
+    cnt_2d_bfr), so 0.99 has margin."""
+    cols = feature_columns(feats)
+    forbidden = [c for c in FORBIDDEN if c in feats.columns]
+    corr = feats[cols + forbidden].corr().loc[cols, forbidden].abs()
+    hits = corr.stack()[lambda s: s > 0.99]
+    assert hits.empty, f"features that restate a forbidden column: {hits.to_dict()}"
+    for i, a in enumerate(cols):
+        for b in cols[i + 1:]:
+            assert not (feats[a] + feats[b] == feats[TARGET]).all(), f"{a} + {b} == {TARGET}"
+
+
 def test_lags_are_true_calendar_lags(feats):
     """cnt_lag_1 for date d must equal cnt on d-1, in calendar days."""
     by_date = feats.set_index("dteday")[TARGET]

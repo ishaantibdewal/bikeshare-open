@@ -50,6 +50,28 @@ UNVERIFIED_COLS = {"cnt_2d_bfr"}
 # What feature_columns() and the tests actually enforce.
 FORBIDDEN = LEAKAGE_COLS | TIME_INDEX_COLS | UNVERIFIED_COLS
 
+# --- Every other raw column, classified by hand -------------------------
+# feature_columns() admits ANY numeric column not in FORBIDDEN, so a column
+# appended to the raw CSV becomes a feature silently. tests/test_contract.py
+# checks every raw column against these lists, never against
+# feature_columns(), so a new column fails until a person classifies it.
+
+# Same-day weather measurements, passed to the model unchanged.
+RAW_FEATURE_COLS = {"temp", "atemp", "hum", "windspeed"}
+
+# Text columns that src/features.py encodes, and the feature each becomes.
+ENCODED_COLS = {
+    "holiday": "is_holiday",
+    "workday": "is_workday",
+    "weather": "weather_severity",
+}
+
+# Text calendar labels, unused: dayofweek and month_sin/cos are derived from
+# dteday instead, so these would only duplicate them.
+REDUNDANT_COLS = {"season", "mnth", "weekday"}
+
+DATE_COL = "dteday"
+
 # Temporal split: train on 2011, validate on H1 2012, test on H2 2012.
 TRAIN_END = "2011-12-31"
 VALID_END = "2012-06-30"

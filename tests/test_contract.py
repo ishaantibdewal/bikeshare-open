@@ -5,7 +5,17 @@ import pandas as pd
 import pytest
 from sklearn.metrics import r2_score
 
-from src.config import LAG_WARMUP, RAW, RAW_SHA256, TARGET
+from src.config import (
+    DATE_COL,
+    ENCODED_COLS,
+    FORBIDDEN,
+    LAG_WARMUP,
+    RAW,
+    RAW_FEATURE_COLS,
+    RAW_SHA256,
+    REDUNDANT_COLS,
+    TARGET,
+)
 from src.features import build_features, feature_columns, reindex_to_calendar
 from src.ingest import load_raw
 from src.train import MODELS, temporal_split
@@ -30,6 +40,26 @@ def test_raw_csv_is_unmodified():
         f"{RAW.name} changed (sha256 {digest[:16]}, expected {RAW_SHA256[:16]}). "
         "Restore it with: git checkout -- data/raw/bike_daily.csv"
     )
+
+
+def test_every_raw_column_is_classified(raw, feats):
+    """Each raw column must be FORBIDDEN, a raw feature, an encoded source,
+    a redundant label, or the date. Checked against the hand-written lists in
+    src/config.py, not feature_columns(): that function admits any numeric
+    column, so an appended numeric column would classify itself as a feature."""
+    classified = (
+        FORBIDDEN | RAW_FEATURE_COLS | set(ENCODED_COLS) | REDUNDANT_COLS | {DATE_COL}
+    )
+    unclassified = set(raw.columns) - classified
+    assert not unclassified, (
+        f"raw columns not classified in src/config.py: {sorted(unclassified)}. "
+        "Add each to FORBIDDEN, RAW_FEATURE_COLS, ENCODED_COLS or REDUNDANT_COLS."
+    )
+    # The classification must match what the pipeline really does.
+    cols = set(feature_columns(feats))
+    assert RAW_FEATURE_COLS <= cols, f"listed but unused: {RAW_FEATURE_COLS - cols}"
+    assert set(ENCODED_COLS.values()) <= cols, "an ENCODED_COLS target is not a feature"
+    assert not (REDUNDANT_COLS & cols), "a REDUNDANT_COLS column reached the model"
 
 
 def test_calendar_is_complete_before_lagging(raw):
